@@ -1,139 +1,91 @@
-const {
-    Client,
-    GatewayIntentBits,
-    ActionRowBuilder,
-    ButtonBuilder,
-    ButtonStyle,
-    ComponentType,
-    REST,
-    Routes
-} = require('discord.js');
 require('dotenv').config();
+const { Client, GatewayIntentBits, ActionRowBuilder, ButtonBuilder, ButtonStyle, ComponentType } = require('discord.js');
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 
-// --- Helper Functions ---
-
-/**
- * Normalizes card names for EDHREC URLs (lowercase, hyphens instead of spaces, no special chars).
- */
-const slugify = (name) => {
-    return name
-        .toLowerCase()
-        .replace(/\s+/g, '-')
-        .replace(/[^\w\-]+/g, '')
-        .replace(/\-\-+/g, '-')
-        .trim();
-};
-
-/**
- * Main logic to fetch a commander and handle the veto process.
- */
-const executeRandomCommander = async (interaction) => {
-    const scryfallUrl = 'https://api.scryfall.com/cards/random?q=is:commander+-is:digital';
-
-    try {
-        const response = await fetch(scryfallUrl);
-        const card = await response.json();
-
-        // Check if the card has an EDHREC rank. If not, it's likely not on the site.
-        if (!card.edhrec_rank) {
-            console.log(`Skipping ${card.name}: No EDHREC data found.`);
-            return executeRandomCommander(interaction);
-        }
-
-        const edhrecUrl = `https://edhrec.com/commander/${slugify(card.name)}`;
-        const archidektUrl = `https://archidekt.com/search/decks?commander=${encodeURIComponent(card.name)}`;
-
-        // Create the Veto Button
-        const vetoButton = new ButtonBuilder()
-            .setCustomId('veto_roll')
-            .setLabel('Veto (0/3)')
-            .setStyle(ButtonStyle.Danger);
-
-        const row = new ActionRowBuilder().addComponents(vetoButton);
-
-        const content = `🎲 **Your Random Commander is:\n### ${card.name}**\n` +
-            `**Next Steps:**\n` +
-            `1. 💡 [Inspiration on EDHREC](${edhrecUrl})\n` +
-            `2. 🃏 [Find a Decklist on Archidekt](${archidektUrl})\n` +
-            `3. 📥 Copy the deck URL into TTS and play!\n\n` +
-            `*Priority is FUN and learning. Use best judgment on power!*`;
-
-        // If this is a reroll from a veto, we edit the original message.
-        // Otherwise, it's a fresh reply.
-        const responseMsg = interaction.replied || interaction.deferred
-            ? await interaction.editReply({ content, components: [row] })
-            : await interaction.reply({ content, components: [row], fetchReply: true });
-
-        // Setup Collector for Veto Button (5-minute window)
-        const collector = responseMsg.createMessageComponentCollector({
-            componentType: ComponentType.Button,
-            time: 300000
-        });
-
-        const voters = new Set();
-
-        collector.on('collect', async i => {
-            // Check if user already voted to prevent spamming
-            if (voters.has(i.user.id)) {
-                return i.reply({ content: "You've already voted to veto!", ephemeral: true });
-            }
-
-            voters.add(i.user.id);
-
-            // Majority Check (3 votes)
-            if (voters.size >= 3) {
-                await i.update({ content: `🚫 **${card.name}** was vetoed by majority vote! Rolling again...`, components: [] });
-                collector.stop('vetoed');
-                return executeRandomCommander(interaction);
-            }
-
-            // Update label to show progress
-            await i.update({
-                components: [new ActionRowBuilder().addComponents(
-                    ButtonBuilder.from(vetoButton).setLabel(`Veto (${voters.size}/3)`)
-                )]
-            });
-        });
-
-    } catch (error) {
-        console.error('Error fetching commander:', error);
-        const errorMsg = 'Failed to fetch a commander. Scryfall might be down!';
-        if (interaction.replied || interaction.deferred) {
-            await interaction.editReply(errorMsg);
-        } else {
-            await interaction.reply(errorMsg);
-        }
-    }
-};
-
-// --- Discord Bot Lifecycle ---
+const SCRYFALL_URL = 'https://api.scryfall.com/cards/random?q=is:commander+-is:digital';
 
 client.once('ready', () => {
-    console.log(`Logged in as ${client.user.tag}!`);
-
-    // Register the slash command
-    const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
-    const commands = [{
-        name: 'random',
-        description: 'Roll a random commander with EDHREC support and veto options.'
-    }];
-
-    (async () => {
-        try {
-            await rest.put(Routes.applicationCommands(process.env.CLIENT_ID), { body: commands });
-            console.log('Successfully registered /random command.');
-        } catch (error) {
-            console.error(error);
-        }
-    })();
+    console.log(`Logged in as ${client.user.tag}`);
 });
 
 client.on('interactionCreate', async interaction => {
     if (!interaction.isChatInputCommand()) return;
+
     if (interaction.commandName === 'random') {
-        await executeRandomCommander(interaction);
+        await interaction.deferReply();
+
+        const fetchCommander = async (isVeto = false) => {
+            try {
+                const response = await fetch(SCRYFALL_URL);
+                const card = await response.json();
+
+                if (!response.ok || !card) throw new Error('Failed to fetch card');
+
+                // Skip cards not on EDHREC
+                if (!card.edhrec_rank) {
+                    console.log(`Skipping ${card.name}: No EDHREC rank.`);
+                    return fetchCommander(isVeto);
+                }
+
+                const imageUri = card.image_uris?.normal || card.card_faces?.[0]?.image_uris?.normal;
+                const edhrecUrl = card.related_uris?.edhrec || card.scryfall_uri;
+
+                // 1. Build Buttons
+                const edhrecBtn = new ButtonBuilder()
+                    .setLabel('View on EDHREC')
+                    .setStyle(ButtonStyle.Link)
+                    .setURL(edhrecUrl);
+
+                const vetoBtn = new ButtonBuilder()
+                    .setCustomId('veto_roll')
+                    .setLabel('Veto (0/3)')
+                    .setStyle(ButtonStyle.Danger);
+
+                const row = new ActionRowBuilder().addComponents(edhrecBtn, vetoBtn);
+
+                const content = `Your random commander is:\n### ${card.name}`;
+
+                // 2. Send/Update Response
+                const responseMsg = isVeto
+                    ? await interaction.editReply({ content, files: [imageUri], components: [row] })
+                    : await interaction.editReply({ content, files: [imageUri], components: [row] });
+
+                // 3. Setup Veto Collector (5 minute window)
+                const collector = responseMsg.createMessageComponentCollector({
+                    componentType: ComponentType.Button,
+                    time: 300000
+                });
+
+                const voters = new Set();
+
+                collector.on('collect', async i => {
+                    if (i.customId !== 'veto_roll') return;
+                    if (voters.has(i.user.id)) return i.reply({ content: "You already voted!", ephemeral: true });
+
+                    voters.add(i.user.id);
+
+                    if (voters.size >= 3) {
+                        collector.stop('vetoed');
+                        await i.update({ content: `🚫 **${card.name}** vetoed! Rolling again...`, components: [], files: [] });
+                        return fetchCommander(true);
+                    }
+
+                    await i.update({
+                        components: [new ActionRowBuilder().addComponents(
+                            edhrecBtn,
+                            ButtonBuilder.from(vetoBtn).setLabel(`Veto (${voters.size}/3)`)
+                        )]
+                    });
+                });
+
+            } catch (error) {
+                console.error(error);
+                await interaction.editReply('Error fetching data from Scryfall.');
+            }
+        };
+
+        await fetchCommander();
     }
 });
 
