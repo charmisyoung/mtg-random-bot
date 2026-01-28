@@ -1,9 +1,26 @@
 require('dotenv').config();
-const { Client, GatewayIntentBits, ActionRowBuilder, ButtonBuilder, ButtonStyle, ComponentType } = require('discord.js');
+const { 
+    Client, 
+    GatewayIntentBits, 
+    ActionRowBuilder, 
+    ButtonBuilder, 
+    ButtonStyle, 
+    ComponentType 
+} = require('discord.js');
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 
 const SCRYFALL_URL = 'https://api.scryfall.com/cards/random?q=is:commander+-is:digital';
+
+// Helper to ensure the URL slug matches EDHREC's format
+const slugify = (name) => {
+    return name
+        .toLowerCase()
+        .replace(/\s+/g, '-')
+        .replace(/[^\w\-]+/g, '')
+        .replace(/\-\-+/g, '-')
+        .trim();
+};
 
 client.once('ready', () => {
     console.log(`Logged in as ${client.user.tag}`);
@@ -29,13 +46,13 @@ client.on('interactionCreate', async interaction => {
                 }
 
                 const imageUri = card.image_uris?.normal || card.card_faces?.[0]?.image_uris?.normal;
-                const edhrecUrl = card.related_uris?.edhrec || card.scryfall_uri;
+                const edhrecDecksUrl = `https://edhrec.com/decks/${slugify(card.name)}`;
 
                 // 1. Build Buttons
                 const edhrecBtn = new ButtonBuilder()
                     .setLabel('View on EDHREC')
                     .setStyle(ButtonStyle.Link)
-                    .setURL(edhrecUrl);
+                    .setURL(edhrecDecksUrl);
 
                 const vetoBtn = new ButtonBuilder()
                     .setCustomId('veto_roll')
