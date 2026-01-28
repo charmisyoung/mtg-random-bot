@@ -61,24 +61,35 @@ client.on('interactionCreate', async interaction => {
 
                 collector.on('collect', async i => {
                     if (i.customId !== 'veto_roll') return;
-                    if (voters.has(i.user.id)) return i.reply({ content: "You already voted!", ephemeral: true });
 
-                    voters.add(i.user.id);
+                    // Toggle logic: If they are in the set, remove them. If not, add them.
+                    if (voters.has(i.user.id)) {
+                        voters.delete(i.user.id);
+                    } else {
+                        voters.add(i.user.id);
+                    }
 
-                    if (voters.size >= 3) {
+                    // Majority Check (Threshold of 2)
+                    if (voters.size >= 2) {
                         collector.stop('vetoed');
-                        await i.update({ content: `🚫 **${card.name}** vetoed! Rolling again...`, components: [], files: [] });
+                        await i.update({
+                            content: `🚫 **${card.name}** was vetoed! Finding a new one...`,
+                            components: [],
+                            files: []
+                        });
                         return fetchCommander(true);
                     }
 
+                    // Update the button label dynamically (e.g., Veto (1/2) or Veto (0/2))
                     await i.update({
                         components: [new ActionRowBuilder().addComponents(
                             edhrecBtn,
-                            ButtonBuilder.from(vetoBtn).setLabel(`Veto (${voters.size}/3)`)
+                            ButtonBuilder.from(vetoBtn).setLabel(`Veto (${voters.size}/2)`)
                         )]
                     });
                 });
 
+                
             } catch (error) {
                 console.error(error);
                 await interaction.editReply('Error fetching data from Scryfall.');
