@@ -39,7 +39,7 @@ client.on('interactionCreate', async interaction => {
 
                 const vetoBtn = new ButtonBuilder()
                     .setCustomId('veto_roll')
-                    .setLabel('Veto (0/3)')
+                    .setLabel('Veto (0/2)')
                     .setStyle(ButtonStyle.Danger);
 
                 const row = new ActionRowBuilder().addComponents(edhrecBtn, vetoBtn);
@@ -89,7 +89,7 @@ client.on('interactionCreate', async interaction => {
                     });
                 });
 
-                
+
             } catch (error) {
                 console.error(error);
                 await interaction.editReply('Error fetching data from Scryfall.');
