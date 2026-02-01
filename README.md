@@ -1,6 +1,7 @@
 🎲 Random Commander Bot
 
 A dedicated Discord bot for our Virtual Pod Random Commander homebrew format. This bot ensures a truly random, non-curated experience by pulling directly from the Scryfall API and providing immediate links to community-built decks.
+
 🏛 The Format
 
 Random Commander is a "Sealed-style" deck-building challenge. In our virtual environment, where card availability is not a barrier, we focus on the challenge of building around a randomly assigned leader.
@@ -44,6 +45,16 @@ How to Import your Deck:
     
 
 🛠 Technical Setup
+
+Just invite the bot to your server!
+https://discord.com/oauth2/authorize?client_id=1466120471320858939&permissions=2147600384&integration_type=0&scope=bot+applications.commands
+
+Bot permissions:
+• Send Messages
+• Use Slash Commands
+• Embed Links
+• Attach Files
+• Read Message History (Required for the Veto button logic).
 
 This bot is built with discord.js and hosted on a Google Cloud (GCP) e2-micro instance.
 Prerequisites
